@@ -1,0 +1,74 @@
+package com.example.pvplog;
+
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.HashMap;
+import java.util.UUID;
+
+public class PvPLogPlugin extends JavaPlugin implements Listener {
+
+    // 싸우는 상태를 기록하는 맵
+    private HashMap<UUID, UUID> combatLog = new HashMap<>();
+
+    // 싸움 상태 지속 시간 (밀리초 단위)
+    private static final long COMBAT_TIME = 10000;
+
+    @Override
+    public void onEnable() {
+        getServer().getPluginManager().registerEvents(this, this);
+        Bukkit.getLogger().info(ChatColor.GREEN + "PvPLog 플러그인이 활성화되었습니다!");
+    }
+
+    @Override
+    public void onDisable() {
+        Bukkit.getLogger().info(ChatColor.RED + "PvPLog 플러그인이 비활성화되었습니다!");
+    }
+
+    // 플레이어가 서로 공격할 때 발생하는 이벤트 처리
+    @EventHandler
+    public void onPlayerAttack(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player && event.getEntity() instanceof Player) {
+            Player attacker = (Player) event.getDamager();
+            Player victim = (Player) event.getEntity();
+
+            // 싸움 상태 저장
+            combatLog.put(attacker.getUniqueId(), victim.getUniqueId());
+            combatLog.put(victim.getUniqueId(), attacker.getUniqueId());
+
+            // 싸움 상태 일정 시간 후 초기화
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                combatLog.remove(attacker.getUniqueId());
+                combatLog.remove(victim.getUniqueId());
+            }, COMBAT_TIME / 50); // 1초 = 20틱
+        }
+    }
+
+    // 플레이어가 로그아웃할 때 발생하는 이벤트 처리
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player quitter = event.getPlayer();
+
+        if (combatLog.containsKey(quitter.getUniqueId())) {
+            // 싸우던 상대를 찾음
+            UUID opponentId = combatLog.get(quitter.getUniqueId());
+            Player opponent = Bukkit.getPlayer(opponentId);
+
+            // 나간 플레이어를 죽음 처리
+            quitter.setHealth(0.0);
+
+            if (opponent != null && opponent.isOnline()) {
+                opponent.sendMessage(ChatColor.RED + quitter.getName() + "님이 싸움 중 로그아웃하여 죽었습니다!");
+            }
+
+            // 상태 제거
+            combatLog.remove(quitter.getUniqueId());
+        }
+    }
+}
